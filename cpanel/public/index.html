@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VPS Control Panel</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2><i class="fas fa-server"></i> VPS Control Panel</h2>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item active" data-section="dashboard">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Dashboard</span>
+                </li>
+                <li class="nav-item" data-section="files">
+                    <i class="fas fa-folder"></i>
+                    <span>File Manager</span>
+                </li>
+                <li class="nav-item" data-section="services">
+                    <i class="fas fa-cogs"></i>
+                    <span>Services</span>
+                </li>
+                <li class="nav-item" data-section="databases">
+                    <i class="fas fa-database"></i>
+                    <span>Databases</span>
+                </li>
+                <li class="nav-item" data-section="vms">
+                    <i class="fas fa-desktop"></i>
+                    <span>Virtual Machines</span>
+                </li>
+                <li class="nav-item" data-section="backup">
+                    <i class="fas fa-archive"></i>
+                    <span>Backup</span>
+                </li>
+                <li class="nav-item" data-section="logs">
+                    <i class="fas fa-file-alt"></i>
+                    <span>System Logs</span>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="header">
+                <h1 id="page-title">Dashboard</h1>
+                <div class="header-actions">
+                    <button class="btn btn-primary" id="refresh-btn">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+            </header>
+
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="content-section active">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-microchip"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3>CPU Usage</h3>
+                            <div class="stat-value" id="cpu-usage">0%</div>
+                            <div class="stat-progress">
+                                <div class="progress-bar" id="cpu-progress"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-memory"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3>Memory Usage</h3>
+                            <div class="stat-value" id="memory-usage">0%</div>
+                            <div class="stat-progress">
+                                <div class="progress-bar" id="memory-progress"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-hdd"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3>Disk Usage</h3>
+                            <div class="stat-value" id="disk-usage">0%</div>
+                            <div class="stat-progress">
+                                <div class="progress-bar" id="disk-progress"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-network-wired"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3>Network</h3>
+                            <div class="stat-value" id="network-status">Active</div>
+                            <div class="stat-detail" id="network-detail">All interfaces up</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3>System Performance</h3>
+                        <canvas id="performance-chart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Running Processes</h3>
+                        <div id="processes-list" class="processes-list"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- File Manager Section -->
+            <section id="files" class="content-section">
+                <div class="file-manager">
+                    <div class="file-toolbar">
+                        <button class="btn btn-primary" id="upload-btn">
+                            <i class="fas fa-upload"></i> Upload
+                        </button>
+                        <button class="btn btn-secondary" id="new-folder-btn">
+                            <i class="fas fa-folder-plus"></i> New Folder
+                        </button>
+                        <button class="btn btn-danger" id="delete-btn" disabled>
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                        <div class="path-breadcrumb" id="path-breadcrumb">
+                            <span class="path-item active" data-path="/">/</span>
+                        </div>
+                    </div>
+                    <div class="file-list" id="file-list">
+                        <!-- Files will be loaded here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Services Section -->
+            <section id="services" class="content-section">
+                <div class="services-manager">
+                    <div class="services-toolbar">
+                        <button class="btn btn-primary" id="refresh-services-btn">
+                            <i class="fas fa-sync-alt"></i> Refresh Services
+                        </button>
+                    </div>
+                    <div class="services-list" id="services-list">
+                        <!-- Services will be loaded here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Databases Section -->
+            <section id="databases" class="content-section">
+                <div class="databases-manager">
+                    <div class="databases-toolbar">
+                        <button class="btn btn-primary" id="refresh-databases-btn">
+                            <i class="fas fa-sync-alt"></i> Refresh Databases
+                        </button>
+                    </div>
+                    <div class="databases-list" id="databases-list">
+                        <!-- Databases will be loaded here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Virtual Machines Section -->
+            <section id="vms" class="content-section">
+                <div class="vms-manager">
+                    <div class="vms-toolbar">
+                        <button class="btn btn-primary" id="create-vm-btn">
+                            <i class="fas fa-plus"></i> Create VM
+                        </button>
+                        <button class="btn btn-secondary" id="refresh-vms-btn">
+                            <i class="fas fa-sync-alt"></i> Refresh VMs
+                        </button>
+                        <div class="vm-status-indicator" id="vm-status-indicator">
+                            <span class="status-dot"></span>
+                            <span id="virtualization-status">Checking...</span>
+                        </div>
+                    </div>
+                    
+                    <!-- System Resources Overview -->
+                    <div class="resources-overview" id="resources-overview">
+                        <div class="resource-card">
+                            <h4>Available Resources</h4>
+                            <div class="resource-item">
+                                <span class="resource-label">CPU Cores:</span>
+                                <span class="resource-value" id="available-cores">-</span>
+                            </div>
+                            <div class="resource-item">
+                                <span class="resource-label">Memory:</span>
+                                <span class="resource-value" id="available-memory">-</span>
+                            </div>
+                            <div class="resource-item">
+                                <span class="resource-label">Disk Space:</span>
+                                <span class="resource-value" id="available-disk">-</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- VMs List -->
+                    <div class="vms-list" id="vms-list">
+                        <!-- VMs will be loaded here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Backup Section -->
+            <section id="backup" class="content-section">
+                <div class="backup-manager">
+                    <div class="backup-options">
+                        <h3>Create Backup</h3>
+                        <div class="form-group">
+                            <label for="backup-type">Backup Type:</label>
+                            <select id="backup-type" class="form-control">
+                                <option value="files">Files</option>
+                                <option value="database">Database</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="backup-path">Backup Path:</label>
+                            <input type="text" id="backup-path" class="form-control" value="/backups">
+                        </div>
+                        <div class="form-group" id="source-group" style="display: none;">
+                            <label for="backup-source">Source Path:</label>
+                            <input type="text" id="backup-source" class="form-control" value="/home">
+                        </div>
+                        <button class="btn btn-primary" id="create-backup-btn">
+                            <i class="fas fa-archive"></i> Create Backup
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Logs Section -->
+            <section id="logs" class="content-section">
+                <div class="logs-manager">
+                    <div class="logs-toolbar">
+                        <select id="log-type" class="form-control">
+                            <option value="system">System Logs</option>
+                            <option value="auth">Auth Logs</option>
+                            <option value="error">Error Logs</option>
+                        </select>
+                        <button class="btn btn-primary" id="refresh-logs-btn">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                    <div class="logs-content" id="logs-content">
+                        <!-- Logs will be loaded here -->
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Upload Modal -->
+    <div id="upload-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Upload File</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="upload-form">
+                    <div class="form-group">
+                        <label for="file-input">Select File:</label>
+                        <input type="file" id="file-input" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="upload-path">Upload to:</label>
+                        <input type="text" id="upload-path" class="form-control" readonly>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload"></i> Upload
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Folder Modal -->
+    <div id="folder-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create New Folder</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="folder-form">
+                    <div class="form-group">
+                        <label for="folder-name">Folder Name:</label>
+                        <input type="text" id="folder-name" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="folder-path">Create in:</label>
+                        <input type="text" id="folder-path" class="form-control" readonly>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-folder-plus"></i> Create
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create VM Modal -->
+    <div id="create-vm-modal" class="modal">
+        <div class="modal-content large-modal">
+            <div class="modal-header">
+                <h3>Create Virtual Machine</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="create-vm-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="vm-name">VM Name:</label>
+                            <input type="text" id="vm-name" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="vm-template">Template:</label>
+                            <select id="vm-template" class="form-control" required>
+                                <option value="">Select a template...</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="vm-memory">Memory (MB):</label>
+                            <input type="number" id="vm-memory" class="form-control" min="512" max="8192" value="1024" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="vm-cpus">CPU Cores:</label>
+                            <input type="number" id="vm-cpus" class="form-control" min="1" max="8" value="1" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="vm-disk">Disk Size (GB):</label>
+                            <input type="number" id="vm-disk" class="form-control" min="10" max="100" value="20" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="vm-network">Network:</label>
+                            <select id="vm-network" class="form-control">
+                                <option value="default">Default Network</option>
+                                <option value="bridge">Bridge Network</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="vm-ostype">Operating System:</label>
+                        <select id="vm-ostype" class="form-control">
+                            <option value="linux">Linux</option>
+                            <option value="windows">Windows</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="hideCreateVmModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-desktop"></i> Create VM
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- VM Console Modal -->
+    <div id="vm-console-modal" class="modal">
+        <div class="modal-content large-modal">
+            <div class="modal-header">
+                <h3>VM Console - <span id="console-vm-name"></span></h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="console-info">
+                    <p><strong>VNC Display:</strong> <span id="console-vnc-display"></span></p>
+                    <p><strong>Connection URL:</strong> <span id="console-url"></span></p>
+                    <p class="console-note">
+                        <i class="fas fa-info-circle"></i>
+                        Use a VNC client to connect to the VM console. 
+                        Popular VNC clients include RealVNC, TightVNC, or TigerVNC.
+                    </p>
+                </div>
+                <div class="console-actions">
+                    <button class="btn btn-primary" onclick="openVncConsole()">
+                        <i class="fas fa-external-link-alt"></i> Open in VNC Client
+                    </button>
+                    <button class="btn btn-secondary" onclick="hideVmConsoleModal()">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
