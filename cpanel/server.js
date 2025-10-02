@@ -554,9 +554,22 @@ app.get('/api/vms/:vmName/console', async (req, res) => {
       port = '5900'; // Default VNC port for display :0
     }
     
-    // Get server IP address
-    const { stdout: hostname } = await execAsync('hostname -I | awk \'{print $1}\'');
-    const serverIP = hostname.trim();
+    // Get server IP address - try multiple methods
+    let serverIP = 'localhost';
+    try {
+      // Try to get external IP first
+      const { stdout: externalIP } = await execAsync('curl -s ifconfig.me || curl -s ipinfo.io/ip || echo ""');
+      if (externalIP && externalIP.trim() && !externalIP.includes('curl:')) {
+        serverIP = externalIP.trim();
+      } else {
+        // Fallback to local IP
+        const { stdout: localIP } = await execAsync('hostname -I | awk \'{print $1}\'');
+        serverIP = localIP.trim() || 'localhost';
+      }
+    } catch (e) {
+      // Final fallback
+      serverIP = 'localhost';
+    }
     
     // Get the actual VNC port from libvirt
     let actualVncPort = port;
@@ -923,6 +936,34 @@ app.post('/api/networks/create-default', async (req, res) => {
   try {
     await ensureDefaultNetwork();
     res.json({ message: 'Default network created and started successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get server IP endpoint
+app.get('/api/server-ip', async (req, res) => {
+  try {
+    let serverIP = 'localhost';
+    try {
+      // Try to get external IP first
+      const { stdout: externalIP } = await execAsync('curl -s ifconfig.me || curl -s ipinfo.io/ip || echo ""');
+      if (externalIP && externalIP.trim() && !externalIP.includes('curl:')) {
+        serverIP = externalIP.trim();
+      } else {
+        // Fallback to local IP
+        const { stdout: localIP } = await execAsync('hostname -I | awk \'{print $1}\'');
+        serverIP = localIP.trim() || 'localhost';
+      }
+    } catch (e) {
+      serverIP = 'localhost';
+    }
+    
+    res.json({ 
+      serverIP: serverIP,
+      controlPanelUrl: `http://${serverIP}:${PORT}`,
+      message: 'Server IP retrieved'
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

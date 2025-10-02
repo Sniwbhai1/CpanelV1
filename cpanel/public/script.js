@@ -720,8 +720,8 @@ function openVmConsole(vmName) {
             document.getElementById('console-url').textContent = data.consoleUrl;
             
             // Use the web console URL from the server
-            const webConsoleUrl = data.webConsoleUrl || `http://${data.serverIP}:${data.vncPort}`;
             const vncViewerUrl = `/vnc/${vmName}`;
+            const directVncUrl = `http://${data.serverIP}:${data.vncPort}`;
             
             // Update web console link
             const webConsoleLink = document.getElementById('web-console-link');
@@ -730,8 +730,8 @@ function openVmConsole(vmName) {
             webConsoleLink.href = vncViewerUrl;
             webConsoleText.textContent = `Open Web Console (${data.serverIP}:${data.vncPort})`;
             
-            // Store the URL for copying
-            webConsoleLink.dataset.url = webConsoleUrl;
+            // Store the direct VNC URL for copying
+            webConsoleLink.dataset.url = directVncUrl;
             
             document.getElementById('vm-console-modal').style.display = 'block';
         })

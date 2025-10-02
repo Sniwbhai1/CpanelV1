@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VNC Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { border-color: #28a745; background: #d4edda; }
+        .error { border-color: #dc3545; background: #f8d7da; }
+        .warning { border-color: #ffc107; background: #fff3cd; }
+        .info { border-color: #17a2b8; background: #d1ecf1; }
+        
+        .btn {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover { background: #0056b3; }
+        .btn-success { background: #28a745; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .url-box {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 VNC Connection Test</h1>
+        <p>This page helps test and debug VNC connections for your VMs.</p>
+        
+        <div class="test-section info">
+            <h3>📋 Instructions</h3>
+            <ol>
+                <li>Enter your VM name below</li>
+                <li>Click "Test Connection" to get VNC details</li>
+                <li>Try the different connection methods</li>
+                <li>Check the results and URLs generated</li>
+            </ol>
+        </div>
+        
+        <div class="test-section">
+            <h3>🔍 VM Connection Test</h3>
+            <input type="text" id="vm-name" placeholder="Enter VM name (e.g., sniwnode)" style="padding: 8px; width: 200px;">
+            <button class="btn" onclick="testVMConnection()">Test Connection</button>
+            <div id="vm-test-results"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>🌐 Server Information</h3>
+            <button class="btn" onclick="getServerInfo()">Get Server Info</button>
+            <div id="server-info-results"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>🔗 Quick Links</h3>
+            <div id="quick-links">
+                <p>Enter a VM name above and test connection to see quick links here.</p>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h3>📖 Troubleshooting</h3>
+            <h4>Common Issues:</h4>
+            <ul>
+                <li><strong>Invalid URL format:</strong> Check that VNC port is properly converted (e.g., :0 → 5900)</li>
+                <li><strong>Connection refused:</strong> Ensure VM is running and VNC is enabled</li>
+                <li><strong>Wrong IP address:</strong> Make sure you're using the correct server IP</li>
+                <li><strong>Firewall blocking:</strong> Check if VNC ports are open in firewall</li>
+            </ul>
+            
+            <h4>VNC Port Mapping:</h4>
+            <ul>
+                <li>Display :0 = Port 5900</li>
+                <li>Display :1 = Port 5901</li>
+                <li>Display :2 = Port 5902</li>
+                <li>And so on...</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        async function testVMConnection() {
+            const vmName = document.getElementById('vm-name').value;
+            if (!vmName) {
+                alert('Please enter a VM name');
+                return;
+            }
+            
+            const resultsDiv = document.getElementById('vm-test-results');
+            resultsDiv.innerHTML = '<div class="info">🔄 Testing connection to VM: ' + vmName + '</div>';
+            
+            try {
+                const response = await fetch(`/api/vms/${vmName}/console`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultsDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ VM Connection Successful!</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                    
+                    // Generate quick links
+                    generateQuickLinks(vmName, data);
+                } else {
+                    resultsDiv.innerHTML = `
+                        <div class="error">
+                            <h4>❌ VM Connection Failed</h4>
+                            <p><strong>Error:</strong> ${data.error}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Network Error</h4>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function getServerInfo() {
+            const resultsDiv = document.getElementById('server-info-results');
+            resultsDiv.innerHTML = '<div class="info">🔄 Getting server information...</div>';
+            
+            try {
+                const response = await fetch('/api/server-ip');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultsDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ Server Information</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultsDiv.innerHTML = `
+                        <div class="error">
+                            <h4>❌ Failed to get server info</h4>
+                            <p><strong>Error:</strong> ${data.error}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Network Error</h4>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        function generateQuickLinks(vmName, vncData) {
+            const linksDiv = document.getElementById('quick-links');
+            
+            const webConsoleUrl = `http://${window.location.hostname}:${window.location.port}/vnc/${vmName}`;
+            const directVncUrl = `http://${vncData.serverIP}:${vncData.vncPort}`;
+            const vncClientUrl = vncData.consoleUrl;
+            
+            linksDiv.innerHTML = `
+                <h4>🔗 Quick Access Links for ${vmName}:</h4>
+                
+                <div class="url-box">
+                    <strong>Web Console (Recommended):</strong><br>
+                    <a href="${webConsoleUrl}" target="_blank">${webConsoleUrl}</a>
+                    <button class="btn btn-success" onclick="copyToClipboard('${webConsoleUrl}')">Copy</button>
+                </div>
+                
+                <div class="url-box">
+                    <strong>Direct VNC (Browser):</strong><br>
+                    <a href="${directVncUrl}" target="_blank">${directVncUrl}</a>
+                    <button class="btn btn-success" onclick="copyToClipboard('${directVncUrl}')">Copy</button>
+                </div>
+                
+                <div class="url-box">
+                    <strong>VNC Client URL:</strong><br>
+                    <span>${vncClientUrl}</span>
+                    <button class="btn btn-success" onclick="copyToClipboard('${vncClientUrl}')">Copy</button>
+                </div>
+                
+                <div class="warning">
+                    <strong>⚠️ Note:</strong> If the direct VNC URL doesn't work, try the Web Console link instead.
+                </div>
+            `;
+        }
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('URL copied to clipboard!');
+            }).catch(() => {
+                // Fallback
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('URL copied to clipboard!');
+            });
+        }
+        
+        // Auto-fill VM name if provided in URL
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const vmName = urlParams.get('vm');
+            if (vmName) {
+                document.getElementById('vm-name').value = vmName;
+                testVMConnection();
+            }
+        };
+    </script>
+</body>
+</html>
