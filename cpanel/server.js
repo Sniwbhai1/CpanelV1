@@ -552,6 +552,11 @@ app.get('/api/vms/:vmName/console', async (req, res) => {
     let port = display.replace(':', '');
     if (port === '0') {
       port = '5900'; // Default VNC port for display :0
+    } else if (port && !isNaN(port)) {
+      // Convert display number to VNC port (display :1 = port 5901, etc.)
+      port = (5900 + parseInt(port)).toString();
+    } else {
+      port = '5900'; // Default fallback
     }
     
     // Get server IP address - try multiple methods
@@ -574,15 +579,31 @@ app.get('/api/vms/:vmName/console', async (req, res) => {
     // Get the actual VNC port from libvirt
     let actualVncPort = port;
     try {
+      // Try to get the actual VNC port from libvirt
       const { stdout: vncPortInfo } = await execAsync(`virsh domdisplay ${vmName}`);
-      if (vncPortInfo && vncPortInfo.includes(':')) {
+      if (vncPortInfo && vncPortInfo.trim()) {
         const portMatch = vncPortInfo.match(/:(\d+)/);
         if (portMatch) {
-          actualVncPort = portMatch[1];
+          const displayNum = parseInt(portMatch[1]);
+          actualVncPort = (5900 + displayNum).toString();
+        }
+      }
+      
+      // Alternative method: check if VNC is actually listening on the port
+      const { stdout: netstatOutput } = await execAsync(`netstat -tlnp 2>/dev/null | grep :${actualVncPort} || echo ""`);
+      if (!netstatOutput.trim()) {
+        // If port is not listening, try the next few ports
+        for (let i = 0; i < 5; i++) {
+          const testPort = (5900 + i).toString();
+          const { stdout: testOutput } = await execAsync(`netstat -tlnp 2>/dev/null | grep :${testPort} || echo ""`);
+          if (testOutput.trim()) {
+            actualVncPort = testPort;
+            break;
+          }
         }
       }
     } catch (e) {
-      // Use default port if we can't get the actual port
+      // Use calculated port if we can't get the actual port
       actualVncPort = port;
     }
     
@@ -936,6 +957,64 @@ app.post('/api/networks/create-default', async (req, res) => {
   try {
     await ensureDefaultNetwork();
     res.json({ message: 'Default network created and started successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// VNC port debug endpoint
+app.get('/api/debug/vnc-ports', async (req, res) => {
+  try {
+    const debug = {
+      timestamp: new Date().toISOString(),
+      vncPorts: [],
+      listeningPorts: [],
+      libvirtVMs: []
+    };
+    
+    // Check for listening VNC ports
+    try {
+      const { stdout: netstatOutput } = await execAsync('netstat -tlnp 2>/dev/null | grep -E ":(59[0-9][0-9]|60[0-9][0-9])" || echo ""');
+      if (netstatOutput.trim()) {
+        debug.listeningPorts = netstatOutput.trim().split('\n').map(line => {
+          const parts = line.trim().split(/\s+/);
+          return {
+            port: parts[3].split(':')[1],
+            status: parts[5] || 'unknown'
+          };
+        });
+      }
+    } catch (e) {
+      debug.listeningPorts = [];
+    }
+    
+    // Get libvirt VMs and their VNC info
+    try {
+      const { stdout: vmsOutput } = await execAsync('virsh list --all --name 2>/dev/null || echo ""');
+      const vmNames = vmsOutput.trim().split('\n').filter(name => name);
+      
+      for (const vmName of vmNames) {
+        try {
+          const { stdout: vncDisplay } = await execAsync(`virsh vncdisplay ${vmName} 2>/dev/null || echo ""`);
+          const { stdout: domDisplay } = await execAsync(`virsh domdisplay ${vmName} 2>/dev/null || echo ""`);
+          
+          debug.libvirtVMs.push({
+            name: vmName,
+            vncDisplay: vncDisplay.trim(),
+            domDisplay: domDisplay.trim()
+          });
+        } catch (e) {
+          debug.libvirtVMs.push({
+            name: vmName,
+            error: e.message
+          });
+        }
+      }
+    } catch (e) {
+      debug.libvirtVMs = [];
+    }
+    
+    res.json(debug);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
