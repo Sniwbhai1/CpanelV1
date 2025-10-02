@@ -344,6 +344,9 @@ async function createVMWithCloudImage(name, memory, cpus, diskSize, vmPath) {
   // Ensure cloud images directory exists
   await execAsync(`mkdir -p ${cloudImagePath}`);
   
+  // Check and start default network
+  await ensureDefaultNetwork();
+  
   // Download cloud image if not exists (Ubuntu 22.04 as default)
   const cloudImage = `${cloudImagePath}ubuntu-22.04-server-cloudimg-amd64.img`;
   if (!fs.existsSync(cloudImage)) {
@@ -400,7 +403,55 @@ local-hostname: ${name}
   const { stdout, stderr } = await execAsync(command);
 }
 
+async function ensureDefaultNetwork() {
+  try {
+    // Check if default network exists
+    const { stdout: networks } = await execAsync('virsh net-list --all');
+    
+    if (!networks.includes('default')) {
+      console.log('Default network not found, creating it...');
+      // Create default network
+      const defaultNetworkXml = `<?xml version="1.0" encoding="UTF-8"?>
+<network>
+  <name>default</name>
+  <uuid>00000000-0000-0000-0000-000000000000</uuid>
+  <forward mode='nat'/>
+  <bridge name='virbr0' stp='on' delay='0'/>
+  <mac address='52:54:00:00:00:00'/>
+  <ip address='192.168.122.1' netmask='255.255.255.0'>
+    <dhcp>
+      <range start='192.168.122.2' end='192.168.122.254'/>
+    </dhcp>
+  </ip>
+</network>`;
+      
+      const networkFile = '/tmp/default-network.xml';
+      fs.writeFileSync(networkFile, defaultNetworkXml);
+      await execAsync(`virsh net-define ${networkFile}`);
+      await execAsync(`rm -f ${networkFile}`);
+    }
+    
+    // Start the default network
+    await execAsync('virsh net-start default');
+    console.log('Default network is active');
+    
+  } catch (error) {
+    console.log('Network setup error:', error.message);
+    // Try alternative network setup
+    try {
+      await execAsync('virsh net-autostart default');
+      await execAsync('virsh net-start default');
+    } catch (altError) {
+      console.log('Alternative network setup also failed:', altError.message);
+      throw new Error('Failed to setup default network');
+    }
+  }
+}
+
 async function createSimpleVM(name, memory, cpus, diskSize, vmPath) {
+  // Ensure default network is available
+  await ensureDefaultNetwork();
+  
   // Create a simple VM definition without installation media
   const vmXml = `<?xml version='1.0' encoding='utf-8'?>
 <domain type='kvm'>
@@ -587,6 +638,65 @@ app.get('/api/system/resources', async (req, res) => {
         used: totalDisk - availableDisk
       }
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Network management endpoints
+app.get('/api/networks', async (req, res) => {
+  try {
+    const { stdout: networksOutput } = await execAsync('virsh net-list --all');
+    const networks = [];
+    
+    const lines = networksOutput.split('\n').slice(2); // Skip header lines
+    for (const line of lines) {
+      if (line.trim()) {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 3) {
+          networks.push({
+            name: parts[0],
+            state: parts[1],
+            autostart: parts[2],
+            persistent: parts[3] || 'yes'
+          });
+        }
+      }
+    }
+    
+    res.json({ networks });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/networks/:networkName/:action', async (req, res) => {
+  const { networkName, action } = req.params;
+  const validActions = ['start', 'stop', 'destroy', 'autostart', 'undefine'];
+  
+  if (!validActions.includes(action)) {
+    return res.status(400).json({ error: 'Invalid action' });
+  }
+  
+  try {
+    let command;
+    if (action === 'autostart') {
+      command = `virsh net-autostart ${networkName}`;
+    } else {
+      command = `virsh net-${action} ${networkName}`;
+    }
+    
+    const { stdout, stderr } = await execAsync(command);
+    res.json({ message: `Network ${networkName} ${action}ed successfully` });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/networks/create-default', async (req, res) => {
+  try {
+    await ensureDefaultNetwork();
+    res.json({ message: 'Default network created and started successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
