@@ -624,8 +624,8 @@ app.get('/api/vms/:vmName/console', async (req, res) => {
 app.get('/vnc/:vmName', (req, res) => {
   const { vmName } = req.params;
   
-  // Serve the VNC viewer HTML file
-  res.sendFile(path.join(__dirname, 'public', 'vnc-viewer.html'));
+  // Serve the simple VNC viewer HTML file
+  res.sendFile(path.join(__dirname, 'public', 'simple-vnc.html'));
 });
 
 // Alternative VNC viewer with inline HTML (backup)

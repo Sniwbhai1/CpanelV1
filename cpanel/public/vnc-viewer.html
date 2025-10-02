@@ -162,9 +162,14 @@
             
             <div id="vnc-iframe-container" style="display: none;">
                 <h4>VNC Console</h4>
-                <iframe id="vnc-iframe" class="vnc-iframe" src=""></iframe>
+                <div id="vnc-error" class="status error" style="display: none;">
+                    <strong>VNC Connection Error:</strong> The VNC console could not be loaded. 
+                    Please try using a VNC client application instead.
+                </div>
+                <iframe id="vnc-iframe" class="vnc-iframe" src="" onerror="showVNCError()"></iframe>
                 <div style="margin-top: 10px;">
                     <button class="btn" onclick="hideVNC()">❌ Close VNC</button>
+                    <button class="btn btn-warning" onclick="openVNCClient()">🖥️ Open VNC Client</button>
                 </div>
             </div>
         </div>
@@ -206,13 +211,51 @@
                     
                     document.getElementById('vm-info').style.display = 'block';
                     document.getElementById('web-vnc-btn').disabled = false;
+                    
+                    // Generate quick links
+                    generateQuickLinks(currentVM, data);
                 } else {
                     throw new Error(data.error || 'Failed to get console info');
                 }
             } catch (error) {
                 document.getElementById('connection-status').innerHTML = 
                     '<div class="status error">❌ Error: ' + error.message + '</div>';
+                document.getElementById('vm-info').style.display = 'block';
             }
+        }
+        
+        function generateQuickLinks(vmName, vncData) {
+            const linksDiv = document.getElementById('quick-links');
+            
+            const webConsoleUrl = `http://${window.location.hostname}:${window.location.port}/vnc/${vmName}`;
+            const directVncUrl = `http://${vncData.serverIP}:${vncData.vncPort}`;
+            const vncClientUrl = vncData.consoleUrl;
+            
+            linksDiv.innerHTML = `
+                <h4>🔗 Quick Access Links for ${vmName}:</h4>
+                
+                <div class="url-box">
+                    <strong>Web Console (This Page):</strong><br>
+                    <a href="${webConsoleUrl}" target="_blank">${webConsoleUrl}</a>
+                    <button class="btn btn-success" onclick="copyToClipboard('${webConsoleUrl}')">Copy</button>
+                </div>
+                
+                <div class="url-box">
+                    <strong>Direct VNC (Browser):</strong><br>
+                    <a href="${directVncUrl}" target="_blank">${directVncUrl}</a>
+                    <button class="btn btn-success" onclick="copyToClipboard('${directVncUrl}')">Copy</button>
+                </div>
+                
+                <div class="url-box">
+                    <strong>VNC Client URL:</strong><br>
+                    <span>${vncClientUrl}</span>
+                    <button class="btn btn-success" onclick="copyToClipboard('${vncClientUrl}')">Copy</button>
+                </div>
+                
+                <div class="warning">
+                    <strong>⚠️ Note:</strong> If the direct VNC URL doesn't work, try using a VNC client application with the VNC Client URL.
+                </div>
+            `;
         }
         
         function openWebVNC() {
@@ -231,6 +274,19 @@
             document.getElementById('vnc-iframe-container').style.display = 'none';
             document.getElementById('vm-info').style.display = 'block';
             document.getElementById('vnc-iframe').src = '';
+            document.getElementById('vnc-error').style.display = 'none';
+        }
+        
+        function showVNCError() {
+            document.getElementById('vnc-error').style.display = 'block';
+        }
+        
+        function openVNCClient() {
+            if (vncInfo.consoleUrl) {
+                window.open(vncInfo.consoleUrl, '_blank');
+            } else {
+                alert('VNC client URL not available');
+            }
         }
         
         function copyVNCUrl() {

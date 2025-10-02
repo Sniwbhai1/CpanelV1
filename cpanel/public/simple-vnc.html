@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VM Console Access</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #667eea;
+        }
+        .vm-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #667eea;
+        }
+        .connection-method {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .connection-method h3 {
+            color: #667eea;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .url-box {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: monospace;
+            word-break: break-all;
+        }
+        .btn {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            text-decoration: none;
+            display: inline-block;
+            transition: background 0.3s ease;
+        }
+        .btn:hover {
+            background: #5a6fd8;
+        }
+        .btn-success {
+            background: #28a745;
+        }
+        .btn-success:hover {
+            background: #218838;
+        }
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+        .btn-warning:hover {
+            background: #e0a800;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .instructions {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #ffeaa7;
+            margin: 20px 0;
+        }
+        .back-link {
+            text-align: center;
+            margin-top: 30px;
+        }
+        .back-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🖥️ VM Console Access</h1>
+            <p>Access your virtual machine console using the methods below</p>
+        </div>
+        
+        <div id="loading" class="status info">
+            <strong>🔄 Loading VM information...</strong>
+        </div>
+        
+        <div id="vm-details" style="display: none;">
+            <div class="vm-info">
+                <h3>📋 VM Information</h3>
+                <p><strong>VM Name:</strong> <span id="vm-name">Loading...</span></p>
+                <p><strong>VNC Display:</strong> <span id="vnc-display">Loading...</span></p>
+                <p><strong>Server IP:</strong> <span id="server-ip">Loading...</span></p>
+                <p><strong>VNC Port:</strong> <span id="vnc-port">Loading...</span></p>
+            </div>
+            
+            <div class="connection-method">
+                <h3>🌐 Method 1: Web Console (Recommended)</h3>
+                <p>Use the web-based console interface:</p>
+                <div class="url-box" id="web-console-url">
+                    Loading...
+                </div>
+                <button class="btn btn-success" onclick="openWebConsole()">🌐 Open Web Console</button>
+                <button class="btn" onclick="copyWebConsoleUrl()">📋 Copy URL</button>
+            </div>
+            
+            <div class="connection-method">
+                <h3>🖥️ Method 2: VNC Client Application</h3>
+                <p>Use a VNC client like RealVNC, TightVNC, or TigerVNC:</p>
+                <div class="url-box" id="vnc-client-url">
+                    Loading...
+                </div>
+                <button class="btn btn-warning" onclick="openVNCClient()">🖥️ Open VNC Client</button>
+                <button class="btn" onclick="copyVNCClientUrl()">📋 Copy URL</button>
+            </div>
+            
+            <div class="connection-method">
+                <h3>🌍 Method 3: Direct Browser Access</h3>
+                <p>Try accessing VNC directly in your browser (may not work in all browsers):</p>
+                <div class="url-box" id="direct-vnc-url">
+                    Loading...
+                </div>
+                <button class="btn" onclick="openDirectVNC()">🌍 Try Direct Access</button>
+                <button class="btn" onclick="copyDirectVNCUrl()">📋 Copy URL</button>
+            </div>
+            
+            <div class="instructions">
+                <h4>📖 Instructions:</h4>
+                <ul>
+                    <li><strong>Web Console:</strong> Click the "Open Web Console" button for the best experience</li>
+                    <li><strong>VNC Client:</strong> Download a VNC client application and use the VNC URL</li>
+                    <li><strong>Direct Access:</strong> Some browsers support VNC directly - try this if other methods don't work</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div id="error-message" style="display: none;" class="status error">
+            <strong>❌ Error:</strong> <span id="error-text"></span>
+        </div>
+        
+        <div class="back-link">
+            <a href="/">← Back to Control Panel</a>
+        </div>
+    </div>
+
+    <script>
+        let vncData = {};
+        
+        // Get VM name from URL
+        function getVMFromURL() {
+            const path = window.location.pathname;
+            const match = path.match(/\/vnc\/(.+)/);
+            return match ? match[1] : '';
+        }
+        
+        // Load VNC information
+        async function loadVNCInfo() {
+            const vmName = getVMFromURL();
+            if (!vmName) {
+                showError('No VM specified in URL');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/vms/${vmName}/console`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    vncData = data;
+                    displayVNCInfo(vmName, data);
+                } else {
+                    throw new Error(data.error || 'Failed to get console info');
+                }
+            } catch (error) {
+                showError('Failed to load VM information: ' + error.message);
+            }
+        }
+        
+        // Display VNC information
+        function displayVNCInfo(vmName, data) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('vm-details').style.display = 'block';
+            
+            // Update VM details
+            document.getElementById('vm-name').textContent = vmName;
+            document.getElementById('vnc-display').textContent = data.vncDisplay;
+            document.getElementById('server-ip').textContent = data.serverIP;
+            document.getElementById('vnc-port').textContent = data.vncPort;
+            
+            // Update URLs
+            const webConsoleUrl = `http://${window.location.hostname}:${window.location.port}/vnc/${vmName}`;
+            const vncClientUrl = data.consoleUrl;
+            const directVncUrl = data.webConsoleUrl;
+            
+            document.getElementById('web-console-url').textContent = webConsoleUrl;
+            document.getElementById('vnc-client-url').textContent = vncClientUrl;
+            document.getElementById('direct-vnc-url').textContent = directVncUrl;
+            
+            // Store URLs for copying
+            document.getElementById('web-console-url').dataset.url = webConsoleUrl;
+            document.getElementById('vnc-client-url').dataset.url = vncClientUrl;
+            document.getElementById('direct-vnc-url').dataset.url = directVncUrl;
+        }
+        
+        // Show error message
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error-message').style.display = 'block';
+            document.getElementById('error-text').textContent = message;
+        }
+        
+        // Open web console
+        function openWebConsole() {
+            const url = document.getElementById('web-console-url').dataset.url;
+            if (url) {
+                window.open(url, '_blank');
+            }
+        }
+        
+        // Open VNC client
+        function openVNCClient() {
+            const url = document.getElementById('vnc-client-url').dataset.url;
+            if (url) {
+                window.open(url, '_blank');
+            }
+        }
+        
+        // Open direct VNC
+        function openDirectVNC() {
+            const url = document.getElementById('direct-vnc-url').dataset.url;
+            if (url) {
+                window.open(url, '_blank');
+            }
+        }
+        
+        // Copy functions
+        function copyWebConsoleUrl() {
+            copyToClipboard(document.getElementById('web-console-url').dataset.url, 'Web Console URL');
+        }
+        
+        function copyVNCClientUrl() {
+            copyToClipboard(document.getElementById('vnc-client-url').dataset.url, 'VNC Client URL');
+        }
+        
+        function copyDirectVNCUrl() {
+            copyToClipboard(document.getElementById('direct-vnc-url').dataset.url, 'Direct VNC URL');
+        }
+        
+        // Copy to clipboard
+        function copyToClipboard(text, type) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert(type + ' copied to clipboard!');
+            }).catch(() => {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert(type + ' copied to clipboard!');
+            });
+        }
+        
+        // Load VNC info when page loads
+        window.onload = function() {
+            loadVNCInfo();
+        };
+    </script>
+</body>
+</html>
