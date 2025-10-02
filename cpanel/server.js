@@ -645,8 +645,59 @@ app.get('/api/vms/:vmName/console', async (req, res) => {
 app.get('/vnc/:vmName', (req, res) => {
   const { vmName } = req.params;
   
-  // Serve the simple VNC viewer HTML file
-  res.sendFile(path.join(__dirname, 'public', 'simple-vnc.html'));
+  // Serve the VNC console HTML file
+  res.sendFile(path.join(__dirname, 'public', 'vnc-console.html'));
+});
+
+// VNC server setup endpoint
+app.post('/api/vms/:vmName/setup-vnc', async (req, res) => {
+  const { vmName } = req.params;
+  
+  try {
+    // Check if VM is running
+    const { stdout: vmState } = await execAsync(`virsh domstate ${vmName}`);
+    
+    if (!vmState.includes('running')) {
+      return res.status(400).json({ error: 'VM is not running. Please start the VM first.' });
+    }
+    
+    // Get VNC display info
+    const { stdout: vncDisplay } = await execAsync(`virsh vncdisplay ${vmName}`);
+    const display = vncDisplay.trim();
+    
+    // Extract port number
+    let port = display.replace(':', '');
+    if (port === '0') {
+      port = '5900';
+    }
+    
+    // Get server IP
+    let serverIP = 'localhost';
+    try {
+      const { stdout: externalIP } = await execAsync('curl -s ifconfig.me || curl -s ipinfo.io/ip || echo ""');
+      if (externalIP && externalIP.trim() && !externalIP.includes('curl:')) {
+        serverIP = externalIP.trim();
+      } else {
+        const { stdout: localIP } = await execAsync('hostname -I | awk \'{print $1}\'');
+        serverIP = localIP.trim() || 'localhost';
+      }
+    } catch (e) {
+      serverIP = 'localhost';
+    }
+    
+    res.json({
+      success: true,
+      vncDisplay: display,
+      vncPort: port,
+      serverIP: serverIP,
+      consoleUrl: `vnc://${serverIP}:${port}`,
+      webConsoleUrl: `http://${serverIP}:${port}`,
+      message: 'VNC server is ready'
+    });
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to setup VNC: ' + error.message });
+  }
 });
 
 // Alternative VNC viewer with inline HTML (backup)

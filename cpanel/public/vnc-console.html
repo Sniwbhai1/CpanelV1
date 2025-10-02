@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VM VNC Console</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        .console-header {
+            background: #333;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #667eea;
+        }
+        .vm-info {
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .console-controls {
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn:hover {
+            background: #5a6fd8;
+        }
+        .btn-danger {
+            background: #dc3545;
+        }
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        .vnc-container {
+            width: 100vw;
+            height: calc(100vh - 60px);
+            position: relative;
+            background: #000;
+        }
+        .vnc-viewer {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #000;
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            text-align: center;
+        }
+        .error {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff6b6b;
+            font-size: 16px;
+            text-align: center;
+            background: rgba(0,0,0,0.8);
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 500px;
+        }
+        .connection-info {
+            background: rgba(255,255,255,0.1);
+            padding: 10px;
+            border-radius: 4px;
+            margin-left: 20px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="console-header">
+        <div class="vm-info">
+            🖥️ VM Console: <span id="vm-name">Loading...</span>
+        </div>
+        <div class="connection-info">
+            <span id="connection-details">Connecting...</span>
+        </div>
+        <div class="console-controls">
+            <button class="btn" onclick="refreshConsole()">🔄 Refresh</button>
+            <button class="btn" onclick="openInNewTab()">🌐 New Tab</button>
+            <button class="btn" onclick="copyVNCUrl()">📋 Copy URL</button>
+            <a href="/" class="btn btn-danger">❌ Close</a>
+        </div>
+    </div>
+    
+    <div class="vnc-container">
+        <div id="loading" class="loading">
+            <div>🔄 Loading VNC Console...</div>
+            <div style="font-size: 14px; margin-top: 10px;">Please wait while we connect to your VM</div>
+        </div>
+        
+        <div id="error" class="error" style="display: none;">
+            <div>❌ VNC Connection Failed</div>
+            <div id="error-message" style="margin-top: 10px;"></div>
+            <div style="margin-top: 15px;">
+                <button class="btn" onclick="retryConnection()">🔄 Retry</button>
+                <button class="btn" onclick="openVNCClient()">🖥️ Use VNC Client</button>
+            </div>
+        </div>
+        
+        <iframe id="vnc-iframe" class="vnc-viewer" style="display: none;" src=""></iframe>
+    </div>
+
+    <script>
+        let vncData = {};
+        let currentVM = '';
+        
+        // Get VM name from URL
+        function getVMFromURL() {
+            const path = window.location.pathname;
+            const match = path.match(/\/vnc\/(.+)/);
+            return match ? match[1] : '';
+        }
+        
+        // Load VNC information and connect
+        async function loadVNCInfo() {
+            currentVM = getVMFromURL();
+            if (!currentVM) {
+                showError('No VM specified in URL');
+                return;
+            }
+            
+            document.getElementById('vm-name').textContent = currentVM;
+            document.getElementById('connection-details').textContent = 'Getting VM info...';
+            
+            try {
+                const response = await fetch(`/api/vms/${currentVM}/console`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    vncData = data;
+                    document.getElementById('connection-details').textContent = 
+                        `${data.serverIP}:${data.vncPort} (${data.vncDisplay})`;
+                    connectToVNC(data);
+                } else {
+                    throw new Error(data.error || 'Failed to get console info');
+                }
+            } catch (error) {
+                showError('Failed to load VM information: ' + error.message);
+            }
+        }
+        
+        // Connect to VNC
+        function connectToVNC(data) {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('vnc-iframe').style.display = 'none';
+            
+            // Try multiple VNC connection methods
+            const vncUrls = [
+                // Method 1: Direct VNC URL
+                `http://${data.serverIP}:${data.vncPort}`,
+                // Method 2: VNC with different port
+                `http://${data.serverIP}:${data.vncPort}/vnc.html`,
+                // Method 3: WebSocket VNC
+                `ws://${data.serverIP}:${data.vncPort}`,
+                // Method 4: Try with different protocol
+                `https://${data.serverIP}:${data.vncPort}`
+            ];
+            
+            tryVNCConnection(vncUrls, 0);
+        }
+        
+        // Try VNC connection with fallback
+        function tryVNCConnection(urls, index) {
+            if (index >= urls.length) {
+                showError('All VNC connection methods failed. Please use a VNC client application.');
+                return;
+            }
+            
+            const url = urls[index];
+            console.log(`Trying VNC connection: ${url}`);
+            
+            const iframe = document.getElementById('vnc-iframe');
+            iframe.src = url;
+            
+            // Set timeout to try next method
+            setTimeout(() => {
+                if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+                    // Connection successful
+                    document.getElementById('loading').style.display = 'none';
+                    iframe.style.display = 'block';
+                    console.log(`VNC connection successful: ${url}`);
+                } else {
+                    // Try next method
+                    tryVNCConnection(urls, index + 1);
+                }
+            }, 3000);
+            
+            // Also listen for iframe load events
+            iframe.onload = function() {
+                document.getElementById('loading').style.display = 'none';
+                iframe.style.display = 'block';
+                console.log(`VNC iframe loaded: ${url}`);
+            };
+            
+            iframe.onerror = function() {
+                console.log(`VNC iframe error: ${url}`);
+                tryVNCConnection(urls, index + 1);
+            };
+        }
+        
+        // Show error message
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'block';
+            document.getElementById('error-message').textContent = message;
+        }
+        
+        // Refresh console
+        function refreshConsole() {
+            if (vncData && vncData.serverIP) {
+                connectToVNC(vncData);
+            } else {
+                loadVNCInfo();
+            }
+        }
+        
+        // Retry connection
+        function retryConnection() {
+            refreshConsole();
+        }
+        
+        // Open in new tab
+        function openInNewTab() {
+            if (vncData && vncData.webConsoleUrl) {
+                window.open(vncData.webConsoleUrl, '_blank');
+            } else {
+                window.open(window.location.href, '_blank');
+            }
+        }
+        
+        // Copy VNC URL
+        function copyVNCUrl() {
+            const url = vncData.consoleUrl || `vnc://${vncData.serverIP}:${vncData.vncPort}`;
+            navigator.clipboard.writeText(url).then(() => {
+                alert('VNC URL copied to clipboard!');
+            }).catch(() => {
+                alert('Failed to copy URL');
+            });
+        }
+        
+        // Open VNC client
+        function openVNCClient() {
+            if (vncData && vncData.consoleUrl) {
+                window.open(vncData.consoleUrl, '_blank');
+            } else {
+                alert('VNC client URL not available');
+            }
+        }
+        
+        // Load VNC info when page loads
+        window.onload = function() {
+            loadVNCInfo();
+        };
+        
+        // Handle window resize
+        window.onresize = function() {
+            // Refresh iframe to adjust to new size
+            const iframe = document.getElementById('vnc-iframe');
+            if (iframe.style.display !== 'none') {
+                iframe.style.height = 'calc(100vh - 60px)';
+            }
+        };
+    </script>
+</body>
+</html>
