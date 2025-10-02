@@ -431,18 +431,39 @@ async function ensureDefaultNetwork() {
       await execAsync(`rm -f ${networkFile}`);
     }
     
-    // Start the default network
+    // Check if network is already active
+    const { stdout: activeNetworks } = await execAsync('virsh net-list');
+    if (activeNetworks.includes('default')) {
+      console.log('Default network is already active');
+      return; // Network is already active, no need to start it
+    }
+    
+    // Start the default network only if it's not active
     await execAsync('virsh net-start default');
-    console.log('Default network is active');
+    console.log('Default network is now active');
     
   } catch (error) {
     console.log('Network setup error:', error.message);
+    
+    // Check if the error is because network is already active
+    if (error.message.includes('network is already active')) {
+      console.log('Network is already active, continuing...');
+      return; // This is actually a success case
+    }
+    
     // Try alternative network setup
     try {
       await execAsync('virsh net-autostart default');
       await execAsync('virsh net-start default');
     } catch (altError) {
       console.log('Alternative network setup also failed:', altError.message);
+      
+      // Check if this error is also about network being active
+      if (altError.message.includes('network is already active')) {
+        console.log('Network is already active via alternative method, continuing...');
+        return; // This is also a success case
+      }
+      
       throw new Error('Failed to setup default network');
     }
   }
