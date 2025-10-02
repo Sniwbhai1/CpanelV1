@@ -540,23 +540,223 @@ app.delete('/api/vms/:vmName', async (req, res) => {
   }
 });
 
-app.get('/api/vms/:vmName/console', (req, res) => {
+app.get('/api/vms/:vmName/console', async (req, res) => {
   const { vmName } = req.params;
   
-  // Get VNC connection info
-  exec(`virsh vncdisplay ${vmName}`, (error, stdout, stderr) => {
-    if (error) {
-      res.status(500).json({ error: 'Failed to get console info' });
-      return;
-    }
+  try {
+    // Get VNC connection info
+    const { stdout: vncDisplay } = await execAsync(`virsh vncdisplay ${vmName}`);
+    const display = vncDisplay.trim();
     
-    const vncDisplay = stdout.trim();
+    // Extract port number
+    const port = display.replace(':', '');
+    
+    // Get server IP address
+    const { stdout: hostname } = await execAsync('hostname -I | awk \'{print $1}\'');
+    const serverIP = hostname.trim();
+    
     res.json({ 
-      vncDisplay,
-      consoleUrl: `vnc://localhost:${vncDisplay}`,
+      vncDisplay: display,
+      vncPort: port,
+      serverIP: serverIP,
+      consoleUrl: `vnc://${serverIP}:${port}`,
+      webConsoleUrl: `http://${serverIP}:${port}`,
       message: 'Console information retrieved'
     });
-  });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get console info: ' + error.message });
+  }
+});
+
+// Web VNC viewer endpoint
+app.get('/vnc/:vmName', (req, res) => {
+  const { vmName } = req.params;
+  
+  // Serve a simple VNC web viewer page
+  const vncViewerHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VM Console - ${vmName}</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #1a1a1a;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        .header {
+            background: #2d2d2d;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #444;
+        }
+        .vm-name {
+            font-weight: bold;
+            font-size: 18px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .btn:hover {
+            background: #5a6fd8;
+        }
+        .vnc-container {
+            width: 100vw;
+            height: calc(100vh - 60px);
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        .vnc-info {
+            text-align: center;
+            padding: 20px;
+            background: #2d2d2d;
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+        .vnc-info h3 {
+            margin-top: 0;
+            color: #667eea;
+        }
+        .connection-details {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+            font-family: monospace;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="vm-name">🖥️ VM Console: ${vmName}</div>
+        <div class="controls">
+            <button class="btn" onclick="refreshConnection()">🔄 Refresh</button>
+            <a href="/" class="btn">🏠 Back to Control Panel</a>
+        </div>
+    </div>
+    
+    <div class="vnc-container">
+        <div class="vnc-info">
+            <h3>VM Console Access</h3>
+            <div id="connection-status" class="status">
+                <div>🔍 Checking VM status...</div>
+            </div>
+            <div class="connection-details">
+                <div><strong>VM Name:</strong> ${vmName}</div>
+                <div><strong>VNC Display:</strong> <span id="vnc-display">Loading...</span></div>
+                <div><strong>Server IP:</strong> <span id="server-ip">Loading...</span></div>
+                <div><strong>VNC Port:</strong> <span id="vnc-port">Loading...</span></div>
+            </div>
+            <div id="vnc-instructions">
+                <h4>How to Connect:</h4>
+                <p><strong>Option 1 - Web VNC (Recommended):</strong></p>
+                <p>Click the "Open Web VNC" button below to access the console in your browser.</p>
+                <p><strong>Option 2 - VNC Client:</strong></p>
+                <p>Use a VNC client application and connect to: <span id="vnc-url">Loading...</span></p>
+                <div style="margin-top: 20px;">
+                    <button class="btn" onclick="openWebVNC()" id="web-vnc-btn" disabled>🌐 Open Web VNC</button>
+                    <button class="btn" onclick="copyVNCUrl()">📋 Copy VNC URL</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let vncInfo = {};
+        
+        async function loadVNCInfo() {
+            try {
+                const response = await fetch('/api/vms/${vmName}/console');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    vncInfo = data;
+                    document.getElementById('vnc-display').textContent = data.vncDisplay;
+                    document.getElementById('server-ip').textContent = data.serverIP;
+                    document.getElementById('vnc-port').textContent = data.vncPort;
+                    document.getElementById('vnc-url').textContent = data.consoleUrl;
+                    
+                    document.getElementById('connection-status').innerHTML = 
+                        '<div class="status success">✅ VM Console is ready!</div>';
+                    
+                    document.getElementById('web-vnc-btn').disabled = false;
+                    document.getElementById('web-vnc-btn').onclick = () => openWebVNC(data.webConsoleUrl);
+                } else {
+                    throw new Error(data.error || 'Failed to get console info');
+                }
+            } catch (error) {
+                document.getElementById('connection-status').innerHTML = 
+                    '<div class="status error">❌ Error: ' + error.message + '</div>';
+            }
+        }
+        
+        function openWebVNC(url) {
+            if (url) {
+                window.open(url, '_blank');
+            } else if (vncInfo.webConsoleUrl) {
+                window.open(vncInfo.webConsoleUrl, '_blank');
+            }
+        }
+        
+        function copyVNCUrl() {
+            const url = vncInfo.consoleUrl || document.getElementById('vnc-url').textContent;
+            navigator.clipboard.writeText(url).then(() => {
+                alert('VNC URL copied to clipboard!');
+            }).catch(() => {
+                alert('Failed to copy URL. Please copy manually: ' + url);
+            });
+        }
+        
+        function refreshConnection() {
+            loadVNCInfo();
+        }
+        
+        // Load VNC info on page load
+        loadVNCInfo();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(loadVNCInfo, 30000);
+    </script>
+</body>
+</html>`;
+  
+  res.send(vncViewerHtml);
 });
 
 // VM Templates endpoint

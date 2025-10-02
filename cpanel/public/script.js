@@ -718,6 +718,21 @@ function openVmConsole(vmName) {
             document.getElementById('console-vm-name').textContent = vmName;
             document.getElementById('console-vnc-display').textContent = data.vncDisplay;
             document.getElementById('console-url').textContent = data.consoleUrl;
+            
+            // Use the web console URL from the server
+            const webConsoleUrl = data.webConsoleUrl || `http://${data.serverIP}:${data.vncPort}`;
+            const vncViewerUrl = `/vnc/${vmName}`;
+            
+            // Update web console link
+            const webConsoleLink = document.getElementById('web-console-link');
+            const webConsoleText = document.getElementById('web-console-text');
+            
+            webConsoleLink.href = vncViewerUrl;
+            webConsoleText.textContent = `Open Web Console (${data.serverIP}:${data.vncPort})`;
+            
+            // Store the URL for copying
+            webConsoleLink.dataset.url = webConsoleUrl;
+            
             document.getElementById('vm-console-modal').style.display = 'block';
         })
         .catch(error => {
@@ -730,9 +745,40 @@ function hideVmConsoleModal() {
     currentVmConsole = null;
 }
 
-function openVncConsole() {
+function openWebConsole() {
+    const webConsoleLink = document.getElementById('web-console-link');
+    if (webConsoleLink.href && webConsoleLink.href !== '#') {
+        window.open(webConsoleLink.href, '_blank');
+    } else {
+        showAlert('error', 'Web console URL not available');
+    }
+}
+
+function openVncClient() {
     const url = document.getElementById('console-url').textContent;
     window.open(url, '_blank');
+}
+
+function copyConsoleLink() {
+    const webConsoleLink = document.getElementById('web-console-link');
+    const url = webConsoleLink.dataset.url || webConsoleLink.href;
+    
+    if (url && url !== '#') {
+        navigator.clipboard.writeText(url).then(() => {
+            showAlert('success', 'Console link copied to clipboard!');
+        }).catch(() => {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = url;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            showAlert('success', 'Console link copied to clipboard!');
+        });
+    } else {
+        showAlert('error', 'No console URL available to copy');
+    }
 }
 
 // VM Creation Form

@@ -827,11 +827,70 @@ body {
     margin-bottom: 20px;
 }
 
-.console-info p {
-    margin-bottom: 10px;
+.console-method {
+    margin-bottom: 25px;
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    border-left: 4px solid #667eea;
 }
 
-.console-info p:last-child {
+.console-method h4 {
+    color: #333;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.console-method p {
+    color: #666;
+    margin-bottom: 15px;
+}
+
+.console-link-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.console-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    flex: 1;
+    justify-content: center;
+}
+
+.console-link:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    color: white;
+    text-decoration: none;
+}
+
+.vnc-details {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+}
+
+.vnc-details p {
+    margin-bottom: 8px;
+}
+
+.vnc-details p:last-child {
     margin-bottom: 0;
 }
 
@@ -842,12 +901,16 @@ body {
     border-radius: 6px;
     border-left: 4px solid #bee5eb;
     margin-top: 15px;
+    line-height: 1.6;
 }
 
 .console-actions {
     display: flex;
     gap: 10px;
     justify-content: flex-end;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #e9ecef;
 }
 
 /* VM Templates */

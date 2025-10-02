@@ -391,17 +391,41 @@
             </div>
             <div class="modal-body">
                 <div class="console-info">
-                    <p><strong>VNC Display:</strong> <span id="console-vnc-display"></span></p>
-                    <p><strong>Connection URL:</strong> <span id="console-url"></span></p>
-                    <p class="console-note">
+                    <div class="console-method">
+                        <h4><i class="fas fa-globe"></i> Web Console (Recommended)</h4>
+                        <p>Access your VM console directly in your browser:</p>
+                        <div class="console-link-container">
+                            <a href="#" id="web-console-link" class="console-link" target="_blank">
+                                <i class="fas fa-external-link-alt"></i>
+                                <span id="web-console-text">Open Web Console</span>
+                            </a>
+                            <button class="btn btn-sm btn-secondary" onclick="copyConsoleLink()">
+                                <i class="fas fa-copy"></i> Copy Link
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="console-method">
+                        <h4><i class="fas fa-desktop"></i> VNC Client</h4>
+                        <p>Use a VNC client application:</p>
+                        <div class="vnc-details">
+                            <p><strong>VNC Display:</strong> <span id="console-vnc-display"></span></p>
+                            <p><strong>Connection URL:</strong> <span id="console-url"></span></p>
+                        </div>
+                        <button class="btn btn-secondary" onclick="openVncClient()">
+                            <i class="fas fa-desktop"></i> Open in VNC Client
+                        </button>
+                    </div>
+                    
+                    <div class="console-note">
                         <i class="fas fa-info-circle"></i>
-                        Use a VNC client to connect to the VM console. 
-                        Popular VNC clients include RealVNC, TightVNC, or TigerVNC.
-                    </p>
+                        <strong>Web Console:</strong> Works in any modern browser. No additional software required.<br>
+                        <strong>VNC Client:</strong> Requires VNC client software like RealVNC, TightVNC, or TigerVNC.
+                    </div>
                 </div>
                 <div class="console-actions">
-                    <button class="btn btn-primary" onclick="openVncConsole()">
-                        <i class="fas fa-external-link-alt"></i> Open in VNC Client
+                    <button class="btn btn-primary" onclick="openWebConsole()">
+                        <i class="fas fa-globe"></i> Open Web Console
                     </button>
                     <button class="btn btn-secondary" onclick="hideVmConsoleModal()">Close</button>
                 </div>
