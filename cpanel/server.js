@@ -700,6 +700,102 @@ app.post('/api/vms/:vmName/setup-vnc', async (req, res) => {
   }
 });
 
+// VNC proxy endpoint - serves VNC content through the web server
+app.get('/vnc-proxy/:vmName', async (req, res) => {
+  const { vmName } = req.params;
+  
+  try {
+    // Get VNC info
+    const { stdout: vncDisplay } = await execAsync(`virsh vncdisplay ${vmName}`);
+    const display = vncDisplay.trim();
+    let port = display.replace(':', '');
+    if (port === '0') {
+      port = '5900';
+    }
+    
+    // Create a simple VNC viewer HTML
+    const vncViewerHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VNC Console - ${vmName}</title>
+    <style>
+        body { margin: 0; padding: 0; background: #000; }
+        .vnc-container { width: 100vw; height: 100vh; }
+        .vnc-info { 
+            position: absolute; 
+            top: 10px; 
+            left: 10px; 
+            color: white; 
+            background: rgba(0,0,0,0.7); 
+            padding: 10px; 
+            border-radius: 5px;
+            z-index: 1000;
+        }
+        .vnc-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+        }
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 2px;
+        }
+        .btn:hover { background: #5a6fd8; }
+    </style>
+</head>
+<body>
+    <div class="vnc-info">
+        <strong>VM:</strong> ${vmName} | <strong>VNC:</strong> ${display} | <strong>Port:</strong> ${port}
+    </div>
+    <div class="vnc-controls">
+        <button class="btn" onclick="window.close()">Close</button>
+        <button class="btn" onclick="location.reload()">Refresh</button>
+    </div>
+    <div class="vnc-container">
+        <iframe src="http://localhost:${port}" width="100%" height="100%" frameborder="0"></iframe>
+    </div>
+    <script>
+        // Fallback if iframe fails
+        setTimeout(() => {
+            const iframe = document.querySelector('iframe');
+            if (!iframe.contentDocument || iframe.contentDocument.readyState !== 'complete') {
+                document.body.innerHTML = \`
+                    <div style="color: white; text-align: center; padding: 50px;">
+                        <h2>VNC Connection Failed</h2>
+                        <p>Unable to connect to VNC server on localhost:${port}</p>
+                        <p>Please use a VNC client application with:</p>
+                        <p><strong>vnc://localhost:${port}</strong></p>
+                        <button class="btn" onclick="window.close()">Close</button>
+                    </div>
+                \`;
+            }
+        }, 5000);
+    </script>
+</body>
+</html>`;
+    
+    res.send(vncViewerHTML);
+    
+  } catch (error) {
+    res.status(500).send(`
+      <html>
+        <body style="color: white; background: #000; text-align: center; padding: 50px;">
+          <h2>VNC Error</h2>
+          <p>Failed to get VNC information: ${error.message}</p>
+          <button onclick="window.close()">Close</button>
+        </body>
+      </html>
+    `);
+  }
+});
+
 // Alternative VNC viewer with inline HTML (backup)
 app.get('/vnc-inline/:vmName', (req, res) => {
   const { vmName } = req.params;

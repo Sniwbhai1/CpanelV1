@@ -173,14 +173,18 @@
             
             // Try multiple VNC connection methods
             const vncUrls = [
-                // Method 1: Direct VNC URL
-                `http://${data.serverIP}:${data.vncPort}`,
-                // Method 2: VNC with different port
-                `http://${data.serverIP}:${data.vncPort}/vnc.html`,
-                // Method 3: WebSocket VNC
-                `ws://${data.serverIP}:${data.vncPort}`,
-                // Method 4: Try with different protocol
-                `https://${data.serverIP}:${data.vncPort}`
+                // Method 1: Use VNC proxy (recommended)
+                `/vnc-proxy/${currentVM}`,
+                // Method 2: Use localhost (VNC is usually only accessible locally)
+                `http://localhost:${data.vncPort}`,
+                // Method 3: Use 127.0.0.1
+                `http://127.0.0.1:${data.vncPort}`,
+                // Method 4: Try with VNC HTML interface
+                `http://localhost:${data.vncPort}/vnc.html`,
+                // Method 5: Try with noVNC (if available)
+                `http://localhost:6080/vnc.html?host=localhost&port=${data.vncPort}`,
+                // Method 6: Try external IP (last resort)
+                `http://${data.serverIP}:${data.vncPort}`
             ];
             
             tryVNCConnection(vncUrls, 0);
@@ -189,7 +193,15 @@
         // Try VNC connection with fallback
         function tryVNCConnection(urls, index) {
             if (index >= urls.length) {
-                showError('All VNC connection methods failed. Please use a VNC client application.');
+                showError(`All VNC connection methods failed. 
+                
+The VNC server is running on localhost:${vncData.vncPort} but is not accessible through the browser.
+
+Please use a VNC client application with:
+vnc://localhost:${vncData.vncPort}
+
+Or try opening this URL in a VNC client:
+${vncData.consoleUrl}`);
                 return;
             }
             
