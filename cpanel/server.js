@@ -548,19 +548,37 @@ app.get('/api/vms/:vmName/console', async (req, res) => {
     const { stdout: vncDisplay } = await execAsync(`virsh vncdisplay ${vmName}`);
     const display = vncDisplay.trim();
     
-    // Extract port number
-    const port = display.replace(':', '');
+    // Extract port number and handle :0 case
+    let port = display.replace(':', '');
+    if (port === '0') {
+      port = '5900'; // Default VNC port for display :0
+    }
     
     // Get server IP address
     const { stdout: hostname } = await execAsync('hostname -I | awk \'{print $1}\'');
     const serverIP = hostname.trim();
     
+    // Get the actual VNC port from libvirt
+    let actualVncPort = port;
+    try {
+      const { stdout: vncPortInfo } = await execAsync(`virsh domdisplay ${vmName}`);
+      if (vncPortInfo && vncPortInfo.includes(':')) {
+        const portMatch = vncPortInfo.match(/:(\d+)/);
+        if (portMatch) {
+          actualVncPort = portMatch[1];
+        }
+      }
+    } catch (e) {
+      // Use default port if we can't get the actual port
+      actualVncPort = port;
+    }
+    
     res.json({ 
       vncDisplay: display,
-      vncPort: port,
+      vncPort: actualVncPort,
       serverIP: serverIP,
-      consoleUrl: `vnc://${serverIP}:${port}`,
-      webConsoleUrl: `http://${serverIP}:${port}`,
+      consoleUrl: `vnc://${serverIP}:${actualVncPort}`,
+      webConsoleUrl: `http://${serverIP}:${actualVncPort}`,
       message: 'Console information retrieved'
     });
   } catch (error) {
@@ -570,6 +588,14 @@ app.get('/api/vms/:vmName/console', async (req, res) => {
 
 // Web VNC viewer endpoint
 app.get('/vnc/:vmName', (req, res) => {
+  const { vmName } = req.params;
+  
+  // Serve the VNC viewer HTML file
+  res.sendFile(path.join(__dirname, 'public', 'vnc-viewer.html'));
+});
+
+// Alternative VNC viewer with inline HTML (backup)
+app.get('/vnc-inline/:vmName', (req, res) => {
   const { vmName } = req.params;
   
   // Serve a simple VNC web viewer page
