@@ -309,20 +309,165 @@ app.post('/api/vms/:vmName/:action', async (req, res) => {
 });
 
 app.post('/api/vms/create', async (req, res) => {
-  const { name, memory, cpus, diskSize, osType, network } = req.body;
+  const { name, memory, cpus, diskSize, osType, network, template } = req.body;
   
   try {
-    // Create VM using virt-install
     const vmPath = `/var/lib/libvirt/images/${name}.qcow2`;
-    const command = `virt-install --name ${name} --memory ${memory} --vcpus ${cpus} --disk path=${vmPath},size=${diskSize} --network network=default --graphics vnc --noautoconsole --import`;
     
-    const { stdout, stderr } = await execAsync(command);
+    // Method 1: Try to create VM with cloud image (if available)
+    try {
+      await createVMWithCloudImage(name, memory, cpus, diskSize, vmPath);
+    } catch (cloudError) {
+      console.log('Cloud image method failed, trying simple method:', cloudError.message);
+      // Method 2: Create simple VM without installation media
+      await createSimpleVM(name, memory, cpus, diskSize, vmPath);
+    }
     
     res.json({ message: `VM ${name} created successfully` });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('VM creation error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stdout: error.stdout,
+      stderr: error.stderr
+    });
+    res.status(500).json({ 
+      error: error.message,
+      details: error.stderr || error.stdout || 'Unknown error'
+    });
   }
 });
+
+async function createVMWithCloudImage(name, memory, cpus, diskSize, vmPath) {
+  const cloudImagePath = `/var/lib/libvirt/images/cloud-images/`;
+  
+  // Ensure cloud images directory exists
+  await execAsync(`mkdir -p ${cloudImagePath}`);
+  
+  // Download cloud image if not exists (Ubuntu 22.04 as default)
+  const cloudImage = `${cloudImagePath}ubuntu-22.04-server-cloudimg-amd64.img`;
+  if (!fs.existsSync(cloudImage)) {
+    console.log('Downloading Ubuntu 22.04 cloud image...');
+    await execAsync(`wget -O ${cloudImage} https://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-amd64.img`);
+  }
+  
+  // Create a copy of the cloud image for this VM
+  await execAsync(`cp ${cloudImage} ${vmPath}`);
+  
+  // Resize the disk to the requested size
+  await execAsync(`qemu-img resize ${vmPath} ${diskSize}G`);
+  
+  // Create cloud-init configuration
+  const cloudInitDir = `/var/lib/libvirt/images/${name}-cloud-init`;
+  await execAsync(`mkdir -p ${cloudInitDir}`);
+  
+  // Create user-data file
+  const userData = `#cloud-config
+users:
+  - name: ubuntu
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: users, admin
+    home: /home/ubuntu
+    shell: /bin/bash
+    lock_passwd: false
+chpasswd:
+  list: |
+    ubuntu:ubuntu
+  expire: false
+package_update: true
+packages:
+  - qemu-guest-agent
+runcmd:
+  - systemctl enable qemu-guest-agent
+  - systemctl start qemu-guest-agent
+`;
+  
+  fs.writeFileSync(`${cloudInitDir}/user-data`, userData);
+  
+  // Create meta-data file
+  const metaData = `instance-id: ${name}
+local-hostname: ${name}
+`;
+  fs.writeFileSync(`${cloudInitDir}/meta-data`, metaData);
+  
+  // Create cloud-init ISO
+  await execAsync(`genisoimage -output ${cloudInitDir}.iso -volid cidata -joliet -rock ${cloudInitDir}/user-data ${cloudInitDir}/meta-data`);
+  
+  // Create the VM
+  const command = `virt-install --name ${name} --memory ${memory} --vcpus ${cpus} --disk path=${vmPath},format=qcow2 --disk path=${cloudInitDir}.iso,device=cdrom --network network=default --graphics vnc --noautoconsole --import --os-variant ubuntu22.04`;
+  
+  console.log(`Creating VM with cloud image: ${command}`);
+  const { stdout, stderr } = await execAsync(command);
+}
+
+async function createSimpleVM(name, memory, cpus, diskSize, vmPath) {
+  // Create a simple VM definition without installation media
+  const vmXml = `<?xml version='1.0' encoding='utf-8'?>
+<domain type='kvm'>
+  <name>${name}</name>
+  <memory unit='KiB'>${memory * 1024}</memory>
+  <currentMemory unit='KiB'>${memory * 1024}</currentMemory>
+  <vcpu placement='static'>${cpus}</vcpu>
+  <os>
+    <type arch='x86_64' machine='pc-q35-6.2'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+  <cpu mode='host-passthrough' check='none'/>
+  <clock offset='utc'/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='${vmPath}'/>
+      <target dev='vda' bus='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x04' slot='0x00' function='0x0'/>
+    </disk>
+    <interface type='network'>
+      <mac address='52:54:00:${Math.random().toString(16).substr(2, 2)}:${Math.random().toString(16).substr(2, 2)}:${Math.random().toString(16).substr(2, 2)}'/>
+      <source network='default'/>
+      <model type='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x0'/>
+    </interface>
+    <serial type='pty'>
+      <target type='isa-serial' port='0'>
+        <model name='isa-serial'/>
+      </target>
+    </serial>
+    <console type='pty'>
+      <target type='serial' port='0'/>
+    </console>
+    <graphics type='vnc' port='-1' autoport='yes' listen='0.0.0.0'>
+      <listen type='address' address='0.0.0.0'/>
+    </graphics>
+    <video>
+      <model type='qxl' ram='65536' vram='65536' vgamem='16384' heads='1' primary='yes'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x0'/>
+    </video>
+  </devices>
+</domain>`;
+
+  // Create the disk image
+  await execAsync(`qemu-img create -f qcow2 ${vmPath} ${diskSize}G`);
+  
+  // Save VM definition to file
+  const xmlFile = `/tmp/${name}.xml`;
+  fs.writeFileSync(xmlFile, vmXml);
+  
+  // Define the VM
+  await execAsync(`virsh define ${xmlFile}`);
+  
+  // Clean up
+  await execAsync(`rm -f ${xmlFile}`);
+  
+  console.log(`Simple VM ${name} created successfully`);
+}
 
 app.delete('/api/vms/:vmName', async (req, res) => {
   const { vmName } = req.params;
@@ -442,6 +587,97 @@ app.get('/api/system/resources', async (req, res) => {
         used: totalDisk - availableDisk
       }
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Debug endpoint for VM setup
+app.get('/api/debug/vm-setup', async (req, res) => {
+  try {
+    const debug = {
+      timestamp: new Date().toISOString(),
+      system: {
+        platform: process.platform,
+        arch: process.arch,
+        nodeVersion: process.version
+      },
+      virtualization: {
+        virsh: false,
+        virtInstall: false,
+        qemuImg: false,
+        genisoimage: false,
+        wget: false
+      },
+      permissions: {
+        libvirtDir: false,
+        imagesDir: false
+      },
+      services: {
+        libvirtd: false
+      }
+    };
+    
+    // Check virtualization tools
+    try {
+      await execAsync('virsh --version');
+      debug.virtualization.virsh = true;
+    } catch (e) {
+      debug.virtualization.virsh = false;
+    }
+    
+    try {
+      await execAsync('virt-install --version');
+      debug.virtualization.virtInstall = true;
+    } catch (e) {
+      debug.virtualization.virtInstall = false;
+    }
+    
+    try {
+      await execAsync('qemu-img --version');
+      debug.virtualization.qemuImg = true;
+    } catch (e) {
+      debug.virtualization.qemuImg = false;
+    }
+    
+    try {
+      await execAsync('genisoimage --version');
+      debug.virtualization.genisoimage = true;
+    } catch (e) {
+      debug.virtualization.genisoimage = false;
+    }
+    
+    try {
+      await execAsync('wget --version');
+      debug.virtualization.wget = true;
+    } catch (e) {
+      debug.virtualization.wget = false;
+    }
+    
+    // Check permissions
+    try {
+      await execAsync('test -w /var/lib/libvirt');
+      debug.permissions.libvirtDir = true;
+    } catch (e) {
+      debug.permissions.libvirtDir = false;
+    }
+    
+    try {
+      await execAsync('test -w /var/lib/libvirt/images');
+      debug.permissions.imagesDir = true;
+    } catch (e) {
+      debug.permissions.imagesDir = false;
+    }
+    
+    // Check services
+    try {
+      await execAsync('systemctl is-active libvirtd');
+      debug.services.libvirtd = true;
+    } catch (e) {
+      debug.services.libvirtd = false;
+    }
+    
+    res.json(debug);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

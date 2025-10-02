@@ -791,7 +791,12 @@ function createVM() {
         document.getElementById('create-vm-form').reset();
     })
     .catch(error => {
-        showAlert('error', 'Failed to create VM');
+        console.error('VM creation error:', error);
+        let errorMessage = 'Failed to create VM';
+        if (error.details) {
+            errorMessage += ': ' + error.details;
+        }
+        showAlert('error', errorMessage);
     });
 }
 
